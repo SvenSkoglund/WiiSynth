@@ -18,11 +18,11 @@ import javax.swing.JPanel;
 import com.jsyn.JSyn;
 import com.jsyn.Synthesizer;
 import com.jsyn.data.SegmentedEnvelope;
+import com.jsyn.unitgen.FilterLowPass;
+import com.jsyn.unitgen.FilterStateVariable;
 import com.jsyn.unitgen.LineOut;
 import com.jsyn.unitgen.SawtoothOscillator;
-import com.jsyn.unitgen.SineOscillator;
 import com.jsyn.unitgen.SquareOscillator;
-import com.jsyn.unitgen.TriangleOscillator;
 import com.jsyn.unitgen.UnitOscillator;
 import com.jsyn.unitgen.VariableRateMonoReader;
 
@@ -83,7 +83,7 @@ public class WRLImpl extends WiiRemoteAdapter {
 	private static int y = 0;
 	private static int z = 0;
 
-	private static int lastX = 0;
+	private static double lastX = 0;
 	private static int lastY = 0;
 	private static int lastZ = 0;
 
@@ -93,19 +93,21 @@ public class WRLImpl extends WiiRemoteAdapter {
 	private static UnitOscillator osc;
 	private static UnitOscillator osc2;
 	private static UnitOscillator osc3;
+	private static FilterStateVariable filter;
 	private static LineOut lineOut;
-	private static double osc2interval = 1.498;
+	private static double osc2interval = 4;
 	private static double osc3interval = 2;
 	private static double baseFreq = 345;
 	private static double osc2baseFreq = baseFreq * osc2interval;
 	private static double osc3baseFreq = baseFreq * osc3interval;
-
+	private static double filterBaseFreq = 700;
+	// 1.498
 	// Create an envelope and fill it with recognizable data.
-	private static double[] data = { .01, 1.0, // duration,value pair for frame[0]
-			0.01, 0.95, // duration,value pair for frame[1]
-			0.15, 0.4, // duration,value pair for frame[2]
-			0.15, 0.2, // duration,value pair for frame[3]
-			0.80, 0.0 // duration,value pair for frame[4]
+	private static double[] data = { .0, 1.0, // duration,value pair for frame[0]
+//			.1, 0.95, // duration,value pair for frame[1]
+//			0.1, 0.3, // duration,value pair for frame[2]
+			0.1, 0.2, // duration,value pair for frame[3]
+			0.50, 0.0 // duration,value pair for frame[4]
 	};
 	private static SegmentedEnvelope env = new SegmentedEnvelope(data);
 	private static VariableRateMonoReader envPlayer = new VariableRateMonoReader();
@@ -125,26 +127,34 @@ public class WRLImpl extends WiiRemoteAdapter {
 		synth.add(osc2 = new SquareOscillator());
 		synth.add(osc3 = new SawtoothOscillator());
 
+		synth.add(filter = new FilterStateVariable());
+		filter.resonance.set(.11);
+		filter.amplitude.set(3);
 		// Add a stereo audio output unit.
 		synth.add(lineOut = new LineOut());
 		/* Connect envelope to oscillator amplitude. */
 		envPlayer.output.connect(osc.amplitude);
 		envPlayer.output.connect(osc2.amplitude);
 		envPlayer.output.connect(osc3.amplitude);
+
 		// Connect the oscillator to both channels of the output.
-		osc.output.connect(0, lineOut.input, 0);
-		osc.output.connect(0, lineOut.input, 1);
-		osc2.output.connect(0, lineOut.input, 0);
-		osc2.output.connect(0, lineOut.input, 1);
-		osc3.output.connect(0, lineOut.input, 0);
-		osc3.output.connect(0, lineOut.input, 1);
+		osc.output.connect(0, filter.input, 0);
+		// osc.output.connect(0, filter.input, 1);
+		osc2.output.connect(0, filter.input, 0);
+		// osc2.output.connect(0, filter.input, 1);
+		osc3.output.connect(0, filter.input, 0);
+		// osc3.output.connect(0, filter.input, 1);
+
+		filter.lowPass.connect(0, lineOut.input, 0);
+		filter.lowPass.connect(0, lineOut.input, 1);
+
 		// Set the frequency and amplitude for the sine wave.
 		osc.frequency.set(baseFreq);
 		osc2.frequency.set(osc2baseFreq);
 		osc3.frequency.set(osc3baseFreq);
-		osc.amplitude.set(0.6);
-		osc2.amplitude.set(0.6);
-		osc3.amplitude.set(0.6);
+		osc.amplitude.set(1);
+		osc2.amplitude.set(1);
+		osc3.amplitude.set(1);
 
 		// basic console logging options...
 		WiiRemoteJ.setConsoleLoggingAll();
@@ -209,7 +219,7 @@ public class WRLImpl extends WiiRemoteAdapter {
 					}
 
 					graphics.setColor(Color.RED);
-					graphics.drawLine(t, lastX, t, x);
+					graphics.drawLine(t, (int) lastX, t, x);
 					graphics.setColor(Color.GREEN);
 					graphics.drawLine(t, lastY, t, y);
 					graphics.setColor(Color.BLUE);
@@ -296,9 +306,13 @@ public class WRLImpl extends WiiRemoteAdapter {
 			lastX = x;
 			lastY = y;
 			lastZ = z;
-
-			double freqShift = ((double) lastX / 300.0 - 1) * 4000;
-
+			double freqShift = ((double) lastX / 300 - 1) * 1000.0;
+			if (!Double.isNaN(evt.getPitch())) {
+				double filterShift = ((double) evt.getPitch()) * -400.0;
+				filter.frequency.set(filterBaseFreq + filterShift);
+			}
+			System.err.println(evt.getRoll());
+			// System.out.println(filterShift);
 			x = (int) (evt.getXAcceleration() / 5 * 300) + 300;
 			y = (int) (evt.getYAcceleration() / 5 * 300) + 300;
 			z = (int) (evt.getZAcceleration() / 5 * 300) + 300;
@@ -472,7 +486,6 @@ public class WRLImpl extends WiiRemoteAdapter {
 		if (evt.wasPressed(WRButtonEvent.ONE))
 			System.out.println("1");
 		if (evt.wasPressed(WRButtonEvent.B)) {
-			// System.out.println("In the correct B button event");
 			envPlayer.dataQueue.clear();
 			envPlayer.dataQueue.queue(env, 0, env.getNumFrames());
 			lineOut.start();
@@ -480,9 +493,24 @@ public class WRLImpl extends WiiRemoteAdapter {
 		}
 		if (evt.wasReleased(WRButtonEvent.B)) {
 			osc.stop();
+			osc2.stop();
+			osc3.stop();
+
 		}
-		if (evt.wasPressed(WRButtonEvent.A))
+		if (evt.wasPressed(WRButtonEvent.A)) {
+
+			envPlayer.dataQueue.clear();
+			envPlayer.dataQueue.queue(env, 0, env.getNumFrames());
+			lineOut.start();
+
 			System.out.println("A");
+		}
+		if (evt.wasReleased(WRButtonEvent.A)) {
+			osc.stop();
+			osc2.stop();
+			osc3.stop();
+			
+		}
 		if (evt.wasPressed(WRButtonEvent.MINUS)) {
 			baseFreq = baseFreq / 2;
 			osc2baseFreq = baseFreq * osc2interval;
