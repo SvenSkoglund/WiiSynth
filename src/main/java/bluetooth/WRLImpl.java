@@ -18,7 +18,6 @@ import javax.swing.JPanel;
 import com.jsyn.JSyn;
 import com.jsyn.Synthesizer;
 import com.jsyn.data.SegmentedEnvelope;
-import com.jsyn.unitgen.FilterLowPass;
 import com.jsyn.unitgen.FilterStateVariable;
 import com.jsyn.unitgen.LineOut;
 import com.jsyn.unitgen.SawtoothOscillator;
@@ -113,6 +112,7 @@ public class WRLImpl extends WiiRemoteAdapter {
 	private static VariableRateMonoReader envPlayer = new VariableRateMonoReader();
 
 	public static void main(String args[]) {
+		
 		// Create a context for the synthesizer.
 		synth = JSyn.createSynthesizer();
 
@@ -311,7 +311,6 @@ public class WRLImpl extends WiiRemoteAdapter {
 				double filterShift = ((double) evt.getPitch()) * -400.0;
 				filter.frequency.set(filterBaseFreq + filterShift);
 			}
-			System.err.println(evt.getRoll());
 			// System.out.println(filterShift);
 			x = (int) (evt.getXAcceleration() / 5 * 300) + 300;
 			y = (int) (evt.getYAcceleration() / 5 * 300) + 300;
